@@ -39,7 +39,7 @@ jobs:
           make clean
           make -j4 profile-build ARCH=x86-64-bmi2 COMP=gcc
           make strip ARCH=x86-64-bmi2 COMP=gcc
-          mv stockfish ../pral333-linux-x86-64-bmi2
+          mv pral333 ../pral333-linux-x86-64-bmi2
 
       - name: Package release files
         run: |
@@ -87,7 +87,7 @@ jobs:
           make clean
           make -j4 profile-build ARCH=x86-64-bmi2 COMP=mingw
           make strip ARCH=x86-64-bmi2 COMP=mingw
-          mv stockfish.exe ../pral333-windows-x86-64-bmi2.exe
+          mv pral333.exe ../pral333-windows-x86-64-bmi2.exe
 
       - name: Package release files
         run: |
@@ -129,7 +129,7 @@ jobs:
           make clean
           make -j4 profile-build ARCH=x86-64-bmi2 COMP=clang
           make strip ARCH=x86-64-bmi2 COMP=clang
-          mv stockfish ../pral333-macos-x86-64-bmi2
+          mv pral333 ../pral333-macos-x86-64-bmi2
 
       - name: Package release files
         run: |

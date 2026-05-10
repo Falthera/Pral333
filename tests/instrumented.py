@@ -214,7 +214,7 @@ class TestInteractive(metaclass=OrderedClassMembers):
         self.stockfish.clear_output()
 
     def test_startup_output(self):
-        self.stockfish.starts_with("Stockfish")
+        self.stockfish.starts_with("PRAL333")
 
     def test_uci_command(self):
         self.stockfish.send_command("uci")

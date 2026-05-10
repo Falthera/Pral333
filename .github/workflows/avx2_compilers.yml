@@ -81,4 +81,4 @@ jobs:
 
       - name: Smoke test
         working-directory: src
-        run: ./stockfish bench 16 1 6
+        run: ./pral333 bench 16 1 6
