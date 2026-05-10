@@ -92,6 +92,7 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
         v -= v * (r50 - 80) / 238;  // Stronger dampening in endgames
     } else {
         v -= v * r50 / 399;  // Original dampening from 199
+    }
 
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
