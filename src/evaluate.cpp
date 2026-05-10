@@ -49,50 +49,25 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
 
     auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
 
-    // PRAL333 Enhancement: Stronger NNUE blending with optimized coefficients
-    Value nnue = (128 * psqt + 136 * positional) / 128;
+    Value nnue = (125 * psqt + 131 * positional) / 128;
 
-    // Enhanced complexity evaluation for better position understanding
+    // Blend optimism and eval with nnue complexity
     int nnueComplexity = std::abs(psqt - positional);
-    optimism += optimism * nnueComplexity / 412;  // Increased from 476
-    nnue -= nnue * nnueComplexity / 15728;        // Reduced dampening from 18236
+    optimism += optimism * nnueComplexity / 476;
+    nnue -= nnue * nnueComplexity / 18236;
 
-    // Aggressive material-based evaluation scaling
     int material = 534 * pos.count<PAWN>() + pos.non_pawn_material();
-    int v        = (nnue * (68421 + material) + optimism * (9847 + material)) / 68421;  // Enhanced coefficients
+    int v        = (nnue * (77871 + material) + optimism * (7191 + material)) / 77871;
 
-    // Strengthened aggressive play bonus
     if (Search::ultra_aggressive())
     {
         const int attack = Search::attack_pressure(pos, pos.side_to_move());
-        const int scale   = std::clamp(material / 1050, 0, 4);  // More aggressive scaling
-        v += attack * scale / 2;  // Increased bonus from /3
+        const int scale   = std::clamp(material / 1400, 0, 2);
+        v += attack * scale / 3;
     }
 
-    // PRAL333: Enhanced position-specific evaluations
-    // King safety bonus in endgames
-    if (material < 3000) {
-        const Square ourKing = pos.square<KING>(pos.side_to_move());
-        const Bitboard safeSq = Search::king_ring(ourKing) & ~pos.attacks_by<KING>(~pos.side_to_move());
-        v += __builtin_popcountll(safeSq) * 45;
-    }
-    
-    // Passed pawn bonus enhancement
-    Bitboard passed = pos.pieces(pos.side_to_move(), PAWN) & ~pos.attacks_by<PAWN>(~pos.side_to_move());
-    v += __builtin_popcountll(passed) * 287;
-    
-    // Tempo bonus for aggressive positions
-    if (nnueComplexity > 200) {
-        v += 58;  // Reward complex positions where we move first
-    }
-
-    // Refined shuffling dampening with adaptive penalty
-    int r50 = pos.rule50_count();
-    if (r50 > 80) {
-        v -= v * (r50 - 80) / 238;  // Stronger dampening in endgames
-    } else {
-        v -= v * r50 / 399;  // Original dampening from 199
-    }
+    // Damp down the evaluation linearly when shuffling
+    v -= v * pos.rule50_count() / 199;
 
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
