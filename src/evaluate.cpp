@@ -49,7 +49,8 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
 
     auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
 
-    Value nnue = (125 * psqt + 131 * positional) / 128;
+    // Optimized NNUE blending: slight increase to PSQT reliability (125->126), decrease positional (131->130)
+    Value nnue = (126 * psqt + 130 * positional) / 128;
 
     // Blend optimism and eval with nnue complexity
     int nnueComplexity = std::abs(psqt - positional);
@@ -62,12 +63,13 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
     if (Search::ultra_aggressive())
     {
         const int attack = Search::attack_pressure(pos, pos.side_to_move());
-        const int scale   = std::clamp(material / 1400, 0, 2);
+        const int scale   = std::clamp(material / 1500, 0, 2);  // Increased threshold from 1400 for more aggressive play
         v += attack * scale / 3;
     }
 
     // Damp down the evaluation linearly when shuffling
-    v -= v * pos.rule50_count() / 199;
+    // Slightly reduced dampening (199->210) to encourage winning play over draws
+    v -= v * pos.rule50_count() / 210;
 
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
