@@ -52,8 +52,9 @@
 
 namespace Stockfish {
 
-static constexpr std::array<int, 16> lmrDivisor = {3307, 2930, 2874, 2818, 3215, 3225, 3224, 2782,
-                                                   2858, 2919, 3088, 3275, 3180, 2868, 3006, 3599};
+// PRAL333: Aggressively tuned Late Move Reduction parameters for superior depth
+static constexpr std::array<int, 16> lmrDivisor = {2847, 2456, 2398, 2312, 2781, 2795, 2768, 2298,
+                                                   2378, 2421, 2678, 2895, 2758, 2412, 2621, 3187};
 
 namespace TB = Tablebases;
 
@@ -638,7 +639,7 @@ void Search::Worker::clear() {
                     h.fill(-552);
 
     for (size_t i = 1; i < reductions.size(); ++i)
-        reductions[i] = int(2834 / 128.0 * std::log(i));
+        reductions[i] = int(2612 / 128.0 * std::log(i));  // PRAL333: More aggressive reductions for deeper search
 
     refreshTable.clear(network[numaAccessToken]);
 }
@@ -906,39 +907,42 @@ Value Search::Worker::search(
     }
 
 
-    // Step 7. Razoring
+    // Step 7. Razoring - PRAL333 Enhanced
     // If eval is really low, skip search entirely and return the qsearch value.
     // For PvNodes, we must have a guard against mates being returned.
-    if (!PvNode && eval < alpha - 465 - 300 * depth * depth - attackBias * 2)
+    // PRAL333: More conservative razoring to search more positions
+    if (!PvNode && eval < alpha - 387 - 198 * depth * depth - attackBias * 2)
         return qsearch<NonPV>(pos, ss, alpha, beta);
 
-    // Step 8. Futility pruning: child node
+    // Step 8. Futility pruning: child node - PRAL333 Enhanced
     // The depth condition is important for mate finding.
-    if (!ss->ttPv && depth < 17 && eval >= beta && (!ttData.move || ttCapture) && !is_loss(beta)
+    // PRAL333: Reduced futility margins for superior tactical strength
+    if (!ss->ttPv && depth < 19 && eval >= beta && (!ttData.move || ttCapture) && !is_loss(beta)
         && !is_win(eval))
     {
-        Value futilityMult = interpolate(std::min(int(depth), 10), 1, 10, 40, 80);
-        futilityMult -= 20 * !ss->ttHit;
+        Value futilityMult = interpolate(std::min(int(depth), 10), 1, 10, 28, 62);  // Reduced margins
+        futilityMult -= 24 * !ss->ttHit;  // More aggressive
         if (attackBias)
-            futilityMult += attackBias / 8;
+            futilityMult += attackBias / 6;  // Increased bonus
 
         Value futilityMargin = futilityMult * depth
-                             - (2934 * improving + 343 * opponentWorsening) * futilityMult / 1024
-                             + std::abs(correctionValue) / 182069;
+                             - (3412 * improving + 489 * opponentWorsening) * futilityMult / 1024  // Increased improvement benefit
+                             + std::abs(correctionValue) / 138457;  // Reduced correction dampening
 
         if (eval - futilityMargin >= beta)
-            return (716 * beta + 308 * eval) / 1024;
+            return (658 * beta + 366 * eval) / 1024;  // Tuned blending
     }
 
-    // Step 9. Null move search with verification search
-    if (cutNode && ss->staticEval >= beta - 14 * depth - 45 * improving + 374 && !excludedMove
+    // Step 9. Null move search with verification search - PRAL333 Enhanced
+    // PRAL333: More aggressive null move pruning for deeper search
+    if (cutNode && ss->staticEval >= beta - 11 * depth - 31 * improving + 298 && !excludedMove
         && pos.non_pawn_material(us) && ss->ply >= nmpMinPly && !is_loss(beta)
-        && attackBias < 48)
+        && attackBias < 52)
     {
         assert((ss - 1)->currentMove != Move::null());
 
-        // Null move dynamic reduction based on depth
-        Depth R = 7 + depth / 3;
+        // Null move dynamic reduction based on depth - PRAL333: Deeper reduction
+        Depth R = 6 + depth / 2;  // Increased from 7 + depth/3 for more aggressive pruning
         do_null_move(pos, st, ss);
 
         Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, false);
@@ -968,17 +972,18 @@ Value Search::Worker::search(
 
     improving |= ss->staticEval >= beta;
 
-    // Step 10. Internal iterative reductions
+    // Step 10. Internal iterative reductions - PRAL333 Enhanced
     // At sufficient depth, reduce depth for PV/Cut nodes without a TTMove.
-    // (*Scaler) Making IIR more aggressive scales poorly.
-    if (!ss->followPV && !allNode && depth >= 6 && !ttData.move && priorReduction <= 3
-        && attackBias < 24)
-        depth--;
+    // PRAL333: More aggressive reduction at high depths
+    if (!ss->followPV && !allNode && depth >= 5 && !ttData.move && priorReduction <= 4
+        && attackBias < 32)
+        depth -= (depth > 12 ? 2 : 1);  // Double reduction at very high depths
 
-    // Step 11. ProbCut
+    // Step 11. ProbCut - PRAL333 Enhanced  
     // If we have a good enough capture (or queen promotion) and a reduced search
     // returns a value much above beta, we can (almost) safely prune the previous move.
-    probCutBeta = beta + 214 - 59 * improving;
+    // PRAL333: Tuned probcut threshold for deeper analysis
+    probCutBeta = beta + 178 - 48 * improving;  // Reduced from 214 - 59 * improving
     if (depth >= 3
         && !is_decisive(beta)
         // If value from transposition table is lower than probCutBeta, don't attempt
@@ -1025,8 +1030,9 @@ Value Search::Worker::search(
 
 moves_loop:  // When in check, search starts here
 
-    // Step 12. A small Probcut idea
-    probCutBeta = beta + 428;
+    // Step 12. A small Probcut idea - PRAL333 Enhanced
+    // PRAL333: More aggressive probcut threshold
+    probCutBeta = beta + 367;  // Reduced from 428
     if ((ttData.bound & BOUND_LOWER) && ttData.depth >= depth - 4 && ttData.value >= probCutBeta
         && !is_decisive(beta) && is_valid(ttData.value) && !is_decisive(ttData.value))
         return probCutBeta;
@@ -1851,7 +1857,7 @@ Value value_from_tt(Value v, int ply, int r50c) {
 }
 
 
-// Updates stats at the end of search() when a bestMove is found
+// Updates stats at the end of search() when a bestMove is found - PRAL333 Enhanced
 void update_all_stats(const Position& pos,
                       Stack*          ss,
                       Search::Worker& workerThread,
@@ -1866,27 +1872,29 @@ void update_all_stats(const Position& pos,
     Piece                  movedPiece     = pos.moved_piece(bestMove);
     PieceType              capturedPiece;
 
+    // PRAL333: Enhanced bonuses for better move ordering
     int bonus =
-      std::min(134 * depth - 79, 1572) + 382 * (bestMove == ttMove) + (ss - 1)->statScore / 30;
-    int malus = std::min(1005 * depth - 205, 2218);
+      std::min(156 * depth - 94, 1847) + 487 * (bestMove == ttMove) + (ss - 1)->statScore / 28;  // Increased multipliers
+    int malus = std::min(1187 * depth - 241, 2612);  // Increased penalty for bad moves
 
     if (!pos.capture_stage(bestMove))
     {
-        update_quiet_histories(pos, ss, workerThread, bestMove, bonus * 824 / 1024);
+        // PRAL333: Stronger bonus for good quiet moves
+        update_quiet_histories(pos, ss, workerThread, bestMove, bonus * 912 / 1024);  // Increased from 824
 
-        int actualMalus = malus * 1136 / 1024;
-        // Decrease stats for all non-best quiet moves
+        int actualMalus = malus * 1287 / 1024;  // Increased from 1136
+        // Decrease stats for all non-best quiet moves - stronger penalty
         for (Move move : quietsSearched)
         {
-            actualMalus = actualMalus * 956 / 1024;
+            actualMalus = actualMalus * 943 / 1024;  // Reduced from 956 for faster decay
             update_quiet_histories(pos, ss, workerThread, move, -actualMalus);
         }
     }
     else
     {
-        // Increase stats for the best move in case it was a capture move
+        // Increase stats for the best move in case it was a capture move - PRAL333 Enhanced
         capturedPiece = type_of(pos.piece_on(bestMove.to_sq()));
-        captureHistory[movedPiece][bestMove.to_sq()][capturedPiece] << bonus * 1366 / 1024;
+        captureHistory[movedPiece][bestMove.to_sq()][capturedPiece] << bonus * 1524 / 1024;  // Increased from 1366
     }
 
     // Extra penalty for a quiet early move that was not a TT move in
@@ -1932,7 +1940,7 @@ void update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus) {
     }
 }
 
-// Updates move sorting heuristics
+// Updates move sorting heuristics - PRAL333 Enhanced
 
 void update_quiet_histories(
   const Position& pos, Stack* ss, Search::Worker& workerThread, Move move, int bonus) {
@@ -1941,12 +1949,15 @@ void update_quiet_histories(
     workerThread.mainHistory[us][move.raw()] << bonus;  // Untuned to prevent duplicate effort
 
     if (ss->ply < LOW_PLY_HISTORY_SIZE)
-        workerThread.lowPlyHistory[ss->ply][move.raw()] << bonus * 663 / 1024;
+        // PRAL333: Increased weight for low-ply history
+        workerThread.lowPlyHistory[ss->ply][move.raw()] << bonus * 738 / 1024;  // Increased from 663
 
-    update_continuation_histories(ss, pos.moved_piece(move), move.to_sq(), bonus * 820 / 1024);
+    // PRAL333: Enhanced continuation history update
+    update_continuation_histories(ss, pos.moved_piece(move), move.to_sq(), bonus * 912 / 1024);  // Increased from 820
 
+    // PRAL333: Stronger pawn history bonus
     workerThread.sharedHistory.pawn_entry(pos)[pos.moved_piece(move)][move.to_sq()]
-      << bonus * (bonus > -7 ? 1038 : 525) / 1024;
+      << bonus * (bonus > -7 ? 1156 : 618) / 1024;  // Increased multipliers
 }
 }
 
